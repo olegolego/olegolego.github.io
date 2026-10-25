@@ -13,6 +13,7 @@ import http.server
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -146,9 +147,23 @@ def cmd_serve(args):
         def log_message(self, *a):
             pass
 
+    class Server6(http.server.ThreadingHTTPServer):
+        address_family = socket.AF_INET6
+
+    handler = partial(Handler, directory=str(site.PREVIEW))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    except OSError:
+        print("port %d is busy (is a preview already running?). try: ./blog serve %d" % (port, port + 1))
+        return
+    # browsers may resolve "localhost" to the IPv6 loopback, so listen there too
+    try:
+        threading.Thread(target=Server6(("::1", port), handler).serve_forever, daemon=True).start()
+    except OSError:
+        pass
+
     rebuild()
     threading.Thread(target=watch, daemon=True).start()
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(site.PREVIEW)))
     print("preview: http://localhost:%d   (drafts and empty slots visible here only; Ctrl+C to stop)" % port)
     try:
         server.serve_forever()
