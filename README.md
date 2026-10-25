@@ -25,7 +25,7 @@ Snippets in `.md` files: `img`, `todo`, `math`.
 | `posts/`          | Notebook entries, one file each: `YYYY-MM-DD-slug.md`             |
 | `pages/`          | Fixed pages: `about`, `projects`, `resume`, `cv`, `home` (intro) |
 | `files/`          | PDFs and images, served at `/files/...`                          |
-| `site.json`       | Name, tagline, links, site URL, domain                           |
+| `site.json`       | Name, links (shown as desktop icons), site URL, domain           |
 | `theme/`          | `layout.html` and `style.css` (colors and fonts are at the top)  |
 | `engine/`         | The generator. You shouldn't need to touch it                    |
 | `docs/`           | Generated public site (deploy this). Don't edit by hand          |
@@ -55,20 +55,21 @@ Text in Markdown.
 
 Markdown supported: headings, **bold**, *italic*, ~~strike~~, ==highlight==, `code`,
 fenced code blocks, links, images, lists, `- [ ]` task lists, `>` quotes, tables, `---`.
-An image with a title gets a caption and a strip of tape:
+An image with a title gets a caption in a little frame:
 `![alt](/files/photo.jpg "Caption")`.
 
 Keyboard on an entry page: ← older, → newer.
 
 ## Pages, resume and CV
 
-Each file in `pages/` becomes `/<name>/` with a tab in the top nav.
+Each file in `pages/` becomes `/<name>/` with a desktop icon and a Start menu item.
 
 ```markdown
 ---
 title: Resume
-nav: 3            # tab order; `nav: false` = no tab
+nav: 3            # icon order; `nav: false` = no icon
 file: resume.pdf  # optional: files/resume.pdf gets a download button + inline viewer
+icon: pdf         # optional: doc, pdf, folder, notebook, computer, mail, link
 ---
 ```
 

@@ -98,7 +98,7 @@ def parse_date(value, fallback):
 
 
 def long_date(d):
-    return "%d %s %Y" % (d.day, MONTHS[d.month - 1], d.year)
+    return "%d %s %d" % (d.day, MONTHS[d.month - 1], d.year)
 
 
 def plain_summary(body_html, limit=180):
@@ -163,6 +163,7 @@ def load_pages():
             "html": markdown.render(body, bool(meta.get("math", False))),
             "file": attached,
             "has_file": has_file,
+            "icon": meta.get("icon") or ("pdf" if attached.lower().endswith(".pdf") else "doc"),
             "empty": not body.strip() and not has_file,
             "source": path.relative_to(ROOT).as_posix(),
             "url": "/" if path.stem == "home" else "/%s/" % path.stem,
@@ -171,6 +172,55 @@ def load_pages():
 
 
 # ---------------------------------------------------------------- rendering
+
+# 32x32 pixel-style icons; drawn at 32px on the desktop and 16px in lists and menus
+ICONS = {
+    "computer": '<rect x="4.5" y="3.5" width="23" height="17" fill="#c0c0c0" stroke="#000"/>'
+                '<rect x="7.5" y="6.5" width="17" height="11" fill="#008080" stroke="#404040"/>'
+                '<path d="M9 9h7" stroke="#fff"/><rect x="11.5" y="20.5" width="9" height="3" fill="#a0a0a0" stroke="#000"/>'
+                '<rect x="3.5" y="23.5" width="25" height="5" fill="#c0c0c0" stroke="#000"/><path d="M21 26h5" stroke="#00a000"/>',
+    "notebook": '<rect x="7.5" y="3.5" width="20" height="25" fill="#2457d6" stroke="#000"/>'
+                '<rect x="12.5" y="8.5" width="11" height="6" fill="#fff" stroke="#000"/>'
+                '<path d="M4 7h6M4 11h6M4 15h6M4 19h6M4 23h6" stroke="#808080" stroke-width="2"/>',
+    "folder": '<path d="M2.5 7.5h10l3 3h14v18h-27z" fill="#ffd84a" stroke="#000"/><path d="M3 12.5h26" stroke="#b08a00"/>',
+    "doc": '<path d="M6.5 2.5h14l6 6v21h-20z" fill="#fff" stroke="#000"/><path d="M20.5 2.5v6h6" fill="#c0c0c0" stroke="#000"/>'
+           '<path d="M9 12h14M9 15h14M9 18h14M9 21h10M9 24h12" stroke="#000080"/>',
+    "pdf": '<path d="M6.5 2.5h14l6 6v21h-20z" fill="#fff" stroke="#000"/><path d="M20.5 2.5v6h6" fill="#c0c0c0" stroke="#000"/>'
+           '<path d="M9 12h14M9 15h14M9 18h10" stroke="#808080"/><rect x="8" y="21" width="16" height="6" fill="#d40000"/>',
+    "mail": '<rect x="3.5" y="8.5" width="25" height="16" fill="#fff" stroke="#000"/><path d="M4 9l12 9 12-9" fill="none" stroke="#000"/>',
+    "link": '<circle cx="16" cy="16" r="12" fill="#3a8ee6" stroke="#000"/>'
+            '<path d="M8 11c4 1 5 4 3 7s1 6 4 6M20 6c-2 4 2 5 5 6" fill="#3ca63c" stroke="#1e6e1e"/>',
+    "rss": '<rect x="4.5" y="4.5" width="23" height="23" fill="#f78422" stroke="#000"/><circle cx="10" cy="22" r="2.5" fill="#fff"/>'
+           '<path d="M8 15a9 9 0 0 1 9 9M8 9a15 15 0 0 1 15 15" fill="none" stroke="#fff" stroke-width="3"/>',
+    "error": '<circle cx="16" cy="16" r="13" fill="#d40000" stroke="#000"/><path d="M11 11l10 10M21 11l-10 10" stroke="#fff" stroke-width="3"/>',
+}
+
+
+def icon(name, size=16):
+    return ('<svg class="icon" width="%d" height="%d" viewBox="0 0 32 32" shape-rendering="crispEdges" '
+            'aria-hidden="true">%s</svg>' % (size, size, ICONS.get(name, ICONS["doc"])))
+
+
+def window(title, icon_name, body, status=(), address=None, cls="", close="/"):
+    addr = ""
+    if address is not None:
+        path = "C:\\" + "\\".join(part for part in address.strip("/").split("/") if part)
+        addr = '<div class="addressbar"><span>Address</span><div class="field">%s</div></div>' % html.escape(path)
+    bar = ""
+    if status:
+        bar = '<div class="statusbar">%s</div>' % "".join("<span>%s</span>" % s for s in status)
+    return """<section class="window {cls}">
+  <div class="titlebar">
+    {icon}<span class="title">{title}</span>
+    <span class="controls"><span class="ctl" aria-hidden="true">_</span><span class="ctl" aria-hidden="true">□</span><a class="ctl close" href="{close}" aria-label="Close">✕</a></span>
+  </div>
+  {addr}
+  <div class="window-body">
+{body}
+  </div>
+  {bar}
+</section>""".format(cls=cls, icon=icon(icon_name), title=html.escape(title), close=close, addr=addr, body=body, bar=bar)
+
 
 class Site:
     def __init__(self, dev):
@@ -186,27 +236,41 @@ class Site:
 
     # -- helpers
 
-    def nav(self, active):
-        tabs = [("/notebook/", self.cfg["notebook_title"], "notebook")]
+    def places(self):
+        """(key, url, label, icon) for the desktop and the Start menu."""
+        items = [("home", "/", "Home", "computer"), ("notebook", "/notebook/", self.cfg["notebook_title"], "notebook")]
         for p in sorted((p for p in self.pages if p["nav"] is not None), key=lambda p: (p["nav"], p["title"])):
-            tabs.append((p["url"], p["title"], p["slug"]))
-        out = []
-        for url, title, key in tabs:
-            cls = ' class="active" aria-current="page"' if key == active else ""
-            out.append('<a href="%s"%s>%s</a>' % (url, cls, html.escape(title)))
-        return "\n    ".join(out)
+            items.append((p["slug"], p["url"], p["title"], p["icon"]))
+        return items
 
-    def footer(self):
-        bits = []
+    def links(self):
+        out = []
         for link in self.cfg["links"]:
             if link.get("url"):
-                bits.append('<a href="%s">%s</a>' % (html.escape(link["url"]), html.escape(link.get("label", link["url"]))))
-        if self.cfg["url"] and not self.dev:
-            bits.append('<a href="/feed.xml">RSS</a>')
-        bits.append("updated %s" % self.today.isoformat())
-        return " · ".join(bits)
+                out.append((link["url"], link.get("label", link["url"]), "mail" if link["url"].startswith("mailto:") else "link"))
+        return out
 
-    def write(self, url, title, content, active="", math=False, description=""):
+    def desktop_icons(self, active):
+        out = []
+        for key, url, label, ico in self.places():
+            cls = " selected" if key == active else ""
+            cur = ' aria-current="page"' if key == active else ""
+            out.append('<a class="desk-icon%s" href="%s"%s>%s<span>%s</span></a>' % (cls, url, cur, icon(ico, 32), html.escape(label)))
+        for url, label, ico in self.links():
+            out.append('<a class="desk-icon" href="%s">%s<span>%s</span></a>' % (html.escape(url), icon(ico, 32), html.escape(label)))
+        return "\n    ".join(out)
+
+    def start_menu(self):
+        items = ['<li><a href="%s">%s%s</a></li>' % (url, icon(ico, 24), html.escape(label)) for _, url, label, ico in self.places()]
+        extra = ['<li><a href="%s">%s%s</a></li>' % (html.escape(url), icon(ico, 24), html.escape(label)) for url, label, ico in self.links()]
+        if self.cfg["url"] and not self.dev:
+            extra.append('<li><a href="/feed.xml">%sRSS feed</a></li>' % icon("rss", 24))
+        if extra:
+            items.append('<li class="sep" role="separator"></li>')
+            items.extend(extra)
+        return "\n      ".join(items)
+
+    def write(self, url, title, content, active="", task_icon="doc", math=False, description=""):
         rel = url.strip("/")
         target = self.out / rel / "index.html" if rel and not rel.endswith(".html") else self.out / (rel or "index.html")
         depth = len(Path(rel).parts) if rel and not rel.endswith(".html") else max(len(Path(rel).parts) - 1, 0)
@@ -221,10 +285,12 @@ class Site:
             "page_title": html.escape("%s · %s" % (title, site_title) if title and title != site_title else site_title),
             "description": html.escape(description or self.cfg["description"]),
             "site_title": html.escape(site_title),
-            "tagline": '<p class="tagline">%s</p>' % markdown.inline(self.cfg["tagline"]) if self.cfg["tagline"] else "",
-            "nav": self.nav(active),
+            "desktop_icons": self.desktop_icons(active),
             "content": content,
-            "footer": self.footer(),
+            "start_menu": self.start_menu(),
+            "start_icon": icon("notebook", 20),
+            "task": '<a class="btn task pressed" href="%s">%s<span>%s</span></a>' % (url, icon(task_icon), html.escape(title or site_title)),
+            "updated": self.today.isoformat(),
             "head_extra": head,
             "body_extra": LIVE_RELOAD if self.dev else "",
         }
@@ -238,120 +304,121 @@ class Site:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(page, encoding="utf-8")
 
-    def entry_list(self, posts, summaries=False, date_format="%Y-%m-%d"):
+    def entry_table(self, posts, summaries=False, by_year=False):
         if not posts:
-            return '<p class="muted">No entries yet.</p>'
-        items = []
+            return '<div class="pane list"><p class="empty">No entries yet.</p></div>'
+        rows = []
+        year = None
         for p in posts:
-            draft = ' <span class="draft-tag">draft</span>' if p["draft"] else ""
+            if by_year and p["date"].year != year:
+                year = p["date"].year
+                rows.append('<tr class="group"><td colspan="3">%s %d</td></tr>' % (icon("folder"), year))
+            draft = ' <span class="draft-tag">[draft]</span>' if p["draft"] else ""
             summary = '<span class="summary">%s</span>' % html.escape(p["summary"]) if summaries and p["summary"] else ""
-            items.append('<li><time datetime="%s">%s</time><span><a href="%s">%s</a>%s%s</span></li>' % (
-                p["date"].date().isoformat(), p["date"].strftime(date_format).lstrip("0"),
-                p["url"], html.escape(p["title"]), draft, summary))
-        return '<ul class="entries">\n%s\n</ul>' % "\n".join(items)
+            tags = " ".join("#" + html.escape(t) for t in p["tags"])
+            rows.append('<tr><td><a href="%s">%s<span>%s</span></a>%s%s</td><td><time datetime="%s">%s</time></td><td class="col-tags">%s</td></tr>' % (
+                p["url"], icon("doc"), html.escape(p["title"]), draft, summary,
+                p["date"].date().isoformat(), p["date"].strftime("%Y-%m-%d"), tags))
+        return ('<div class="pane list"><table class="details">\n<thead><tr><th>Name</th><th>Date</th><th class="col-tags">Tags</th></tr></thead>\n'
+                '<tbody>\n%s\n</tbody></table></div>' % "\n".join(rows))
 
-    def tag_links(self, tags):
-        return " ".join('<a class="tag" href="/notebook/tags/%s/">#%s</a>' % (tag_slug(t), html.escape(t)) for t in tags)
+    def count(self, n, one, many):
+        return "%d %s" % (n, one if n == 1 else many)
 
     # -- pages
 
     def build_home(self):
-        parts = []
+        parts = ['<h1 class="sr-only">%s</h1>' % html.escape(self.cfg["title"])]
         if self.home and not self.home["empty"]:
-            parts.append('<div class="prose">%s</div>' % self.home["html"])
+            parts.append('<div class="pane doc prose">%s</div>' % self.home["html"])
         elif self.dev:
             parts.append(empty_slot("pages/home.md", "Intro text for the front page."))
         latest = self.posts[: int(self.cfg["home_entries"])]
-        parts.append('<section class="recent">\n<h2>Recent</h2>\n%s' % self.entry_list(latest, summaries=True))
+        parts.append('<fieldset class="group"><legend>Recent entries</legend>\n%s' % self.entry_table(latest, summaries=True))
         if len(self.posts) > len(latest):
-            parts.append('<p class="more"><a href="/notebook/">All %d entries →</a></p>' % len(self.posts))
-        parts.append("</section>")
-        self.write("/", "", "\n".join(parts), active="home", math=bool(self.home and self.home["math"]))
+            parts.append('<p class="more"><a class="btn" href="/notebook/">All %d entries…</a></p>' % len(self.posts))
+        parts.append("</fieldset>")
+        content = window(self.cfg["title"], "computer", "\n".join(parts), address="/",
+                         status=[self.count(len(self.posts), "entry", "entries"), "updated %s" % self.today.isoformat()])
+        self.write("/", "", content, active="home", task_icon="computer", math=bool(self.home and self.home["math"]))
 
     def build_entries(self):
         for k, p in enumerate(self.posts):
             newer = self.posts[k - 1] if k > 0 else None
             older = self.posts[k + 1] if k + 1 < len(self.posts) else None
-            pager = []
-            if older:
-                pager.append('<a rel="prev" href="%s">← %s</a>' % (older["url"], html.escape(older["title"])))
-            else:
-                pager.append("<span></span>")
-            if newer:
-                pager.append('<a rel="next" href="%s">%s →</a>' % (newer["url"], html.escape(newer["title"])))
-            stamp = '<div class="draft-stamp">draft</div>' if p["draft"] else ""
-            tags = '<p class="tags">%s</p>' % self.tag_links(p["tags"]) if p["tags"] else ""
-            content = """<article class="entry">
-{stamp}<header>
-  <time class="stamp" datetime="{iso}">{date}</time>
+            pager = ['<a class="btn" rel="prev" href="%s" title="%s">&lt; Older</a>' % (older["url"], html.escape(older["title"]))
+                     if older else '<span class="btn disabled">&lt; Older</span>',
+                     '<a class="btn" href="/notebook/">All entries</a>',
+                     '<a class="btn" rel="next" href="%s" title="%s">Newer &gt;</a>' % (newer["url"], html.escape(newer["title"]))
+                     if newer else '<span class="btn disabled">Newer &gt;</span>']
+            tags = '<p class="tags">%s</p>' % " ".join(
+                '<a href="/notebook/tags/%s/">#%s</a>' % (tag_slug(t), html.escape(t)) for t in p["tags"]) if p["tags"] else ""
+            body = """<article class="pane doc">
+<header class="doc-head">
+  <time datetime="{iso}">{date}</time>
   <h1>{title}</h1>
   {tags}
 </header>
 <div class="prose">
 {body}
 </div>
-<nav class="pager">{pager}</nav>
-</article>""".format(stamp=stamp, iso=p["date"].isoformat(), date=p["date"].strftime("%Y-%m-%d"),
-                     title=html.escape(p["title"]), tags=tags, body=p["html"], pager="".join(pager))
+</article>
+<nav class="pager">{pager}</nav>""".format(iso=p["date"].isoformat(), date=long_date(p["date"]),
+                                          title=html.escape(p["title"]), tags=tags, body=p["html"], pager="".join(pager))
+            status = [long_date(p["date"])] + (["DRAFT: hidden on the public site"] if p["draft"] else [])
+            title = "%s%s - %s" % (p["title"], " [draft]" if p["draft"] else "", self.cfg["notebook_title"])
+            content = window(title, "doc", body, address=p["url"], status=status, close="/notebook/")
             self.write(p["url"], p["title"], content, active="notebook", math=p["math"], description=p["summary"])
 
     def build_notebook(self):
-        parts = ['<h1>%s</h1>' % html.escape(self.cfg["notebook_title"])]
+        name = self.cfg["notebook_title"]
         tags = sorted({t for p in self.posts for t in p["tags"]}, key=str.lower)
+        parts = ['<h1 class="sr-only">%s</h1>' % html.escape(name)]
         if tags:
-            parts.append('<p class="tags">%s</p>' % self.tag_links(tags))
-        if not self.posts:
-            parts.append(self.entry_list([]))
-        year = month = None
-        group = []
-
-        def flush():
-            if group:
-                parts.append("<h3>%s</h3>\n%s" % (MONTHS[month - 1], self.entry_list(group, date_format="%d")))
-
-        for p in self.posts:
-            if p["date"].year != year:
-                flush()
-                group = []
-                year, month = p["date"].year, p["date"].month
-                parts.append('<h2 class="year">%d</h2>' % year)
-            elif p["date"].month != month:
-                flush()
-                group = []
-                month = p["date"].month
-            group.append(p)
-        flush()
-        self.write("/notebook/", self.cfg["notebook_title"], "\n".join(parts), active="notebook")
+            parts.append('<div class="toolbar">%s</div>' % "".join(
+                '<a class="btn small" href="/notebook/tags/%s/">#%s</a>' % (tag_slug(t), html.escape(t)) for t in tags))
+        parts.append(self.entry_table(self.posts, by_year=True))
+        status = [self.count(len(self.posts), "entry", "entries"), self.count(len(tags), "tag", "tags")]
+        self.write("/notebook/", name, window(name, "notebook", "\n".join(parts), address="/notebook/", status=status),
+                   active="notebook", task_icon="notebook")
 
         for t in tags:
             tagged = [p for p in self.posts if t in p["tags"]]
-            content = '<h1>#%s</h1>\n%s\n<p class="more"><a href="/notebook/">← all entries</a></p>' % (
-                html.escape(t), self.entry_list(tagged))
-            self.write("/notebook/tags/%s/" % tag_slug(t), "#" + t, content, active="notebook")
+            body = ('<h1 class="sr-only">#%s</h1>\n<div class="toolbar"><a class="btn small" href="/notebook/">&lt; All entries</a></div>\n%s'
+                    % (html.escape(t), self.entry_table(tagged)))
+            url = "/notebook/tags/%s/" % tag_slug(t)
+            content = window("#" + t, "folder", body, address=url, status=[self.count(len(tagged), "entry", "entries")],
+                             close="/notebook/")
+            self.write(url, "#" + t, content, active="notebook", task_icon="folder")
 
     def build_pages(self):
         for p in self.pages:
-            parts = ['<h1>%s</h1>' % html.escape(p["title"])]
+            parts = ['<h1 class="sr-only">%s</h1>' % html.escape(p["title"])]
+            href = "/files/%s" % p["file"]
+            if p["has_file"]:
+                parts.append('<div class="toolbar"><a class="btn" href="%s" download>%s Download %s</a>'
+                             '<a class="btn" href="%s">Open in new tab</a></div>' % (
+                                 html.escape(href), icon(p["icon"]), html.escape(p["file"]), html.escape(href)))
             if p["empty"]:
                 hint = "Write in %s" % p["source"]
                 if p["file"]:
                     hint += " and/or put files/%s in place" % p["file"]
                 parts.append(empty_slot(p["source"], hint + ". Hidden on the public site until filled."))
-            if p["has_file"]:
-                href = "/files/%s" % p["file"]
-                parts.append('<p class="doc-actions"><a class="button" href="%s" download>Download %s</a></p>' % (
-                    html.escape(href), html.escape(p["file"])))
-            elif p["file"] and self.dev and not p["empty"]:
+            elif p["file"] and not p["has_file"] and self.dev:
                 parts.append(empty_slot("files/" + p["file"], "Drop the file here to add a download button."))
             if p["html"].strip():
-                parts.append('<div class="prose">%s</div>' % p["html"])
+                parts.append('<div class="pane doc prose">%s</div>' % p["html"])
             if p["has_file"] and p["file"].lower().endswith(".pdf"):
-                parts.append('<object class="pdf" data="%s" type="application/pdf"><p><a href="%s">Open %s</a></p></object>' % (
-                    html.escape(href), html.escape(href), html.escape(p["file"])))
-            self.write(p["url"], p["title"], "\n".join(parts), active=p["slug"], math=p["math"])
+                parts.append('<div class="pane list"><object class="pdf" data="%s" type="application/pdf">'
+                             '<p class="empty"><a href="%s">Open %s</a></p></object></div>' % (
+                                 html.escape(href), html.escape(href), html.escape(p["file"])))
+            content = window(p["title"], p["icon"], "\n".join(parts), address=p["url"], status=["updated %s" % self.today.isoformat()])
+            self.write(p["url"], p["title"], content, active=p["slug"], task_icon=p["icon"], math=p["math"])
 
     def build_404(self):
-        self.write("/404.html", "Not found", '<h1>Page not found</h1>\n<p><a href="/">← home</a></p>')
+        body = ('<div class="dialog-body">%s<h1>Page not found</h1></div>\n'
+                '<div class="dialog-buttons"><a class="btn" href="/">OK</a></div>' % icon("error", 32))
+        self.write("/404.html", "Error", window("Error", "error", body, cls="dialog"), task_icon="error")
 
     def build_feed(self):
         if not self.cfg["url"] or self.dev:
@@ -403,8 +470,8 @@ class Site:
 
 
 def empty_slot(where, hint):
-    return '<div class="slot"><strong>empty slot</strong> · <code>%s</code><br>%s</div>' % (
-        html.escape(where), html.escape(hint))
+    return '<div class="slot">%s<div><strong>Empty slot</strong> <code>%s</code><br>%s</div></div>' % (
+        icon("folder", 32), html.escape(where), html.escape(hint))
 
 
 def relativize(page, depth):
