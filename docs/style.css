@@ -380,9 +380,9 @@ fieldset.group legend { padding: 0 4px; }
 .start { min-width: 0; padding: 4px 8px; font: 700 16px/1 var(--pixel) !important; }
 .start.pressed { padding: 5px 7px 3px 9px; }
 .tasks { flex: 1; min-width: 0; display: flex; }
-.task { justify-content: flex-start !important; max-width: 240px; min-width: 0 !important; }
-.task span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.task.pressed { background: repeating-conic-gradient(var(--face) 0 25%, var(--hilight) 0 50%) 0 0 / 2px 2px; }
+.taskbtn { justify-content: flex-start !important; max-width: 240px; min-width: 0 !important; }
+.taskbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.taskbtn.pressed { background: repeating-conic-gradient(var(--face) 0 25%, var(--hilight) 0 50%) 0 0 / 2px 2px; }
 .tray { padding: 5px 12px; box-shadow: var(--thin-sunken); white-space: nowrap; }
 
 .start-menu {
@@ -435,7 +435,7 @@ fieldset.group legend { padding: 0 4px; }
   .addressbar > span { display: none; }
   .col-tags { display: none; }
   .doc-head h1 { font-size: 1.6rem; }
-  .task { max-width: 160px; }
+  .taskbtn { max-width: 160px; }
 }
 
 @media print {

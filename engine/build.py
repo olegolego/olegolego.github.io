@@ -289,7 +289,7 @@ class Site:
             "content": content,
             "start_menu": self.start_menu(),
             "start_icon": icon("notebook", 20),
-            "task": '<a class="btn task pressed" href="%s">%s<span>%s</span></a>' % (url, icon(task_icon), html.escape(title or site_title)),
+            "task": '<a class="btn taskbtn pressed" href="%s">%s<span>%s</span></a>' % (url, icon(task_icon), html.escape(title or site_title)),
             "updated": self.today.isoformat(),
             "head_extra": head,
             "body_extra": LIVE_RELOAD if self.dev else "",
