@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{page_title}}</title>
+<meta name="description" content="{{description}}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✎</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=PT+Mono&family=Permanent+Marker&family=VT323&display=swap">
+<link rel="stylesheet" href="/style.css">{{head_extra}}
+</head>
+<body>
+<div class="desk">
+  <nav class="tabs" aria-label="Sections">
+    {{nav}}
+  </nav>
+  <div class="sheet">
+    <header class="masthead">
+      <a class="name" href="/">{{site_title}}</a>
+      {{tagline}}
+    </header>
+    <main>
+{{content}}
+    </main>
+  </div>
+  <footer class="colophon">{{footer}}</footer>
+</div>
+<script>
+document.addEventListener("keydown", function (e) {
+  if (e.altKey || e.ctrlKey || e.metaKey || /input|textarea/i.test(e.target.tagName)) return;
+  var rel = e.key === "ArrowLeft" ? "prev" : e.key === "ArrowRight" ? "next" : null;
+  var link = rel && document.querySelector('.pager a[rel="' + rel + '"]');
+  if (link) location.href = link.href;
+});
+</script>
+{{body_extra}}
+</body>
+</html>

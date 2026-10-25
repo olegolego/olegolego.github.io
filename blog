@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Notebook command line.
+
+  ./blog new ["Title"]      start a new entry (dated now) and open it
+  ./blog edit               open the newest entry
+  ./blog list               list entries
+  ./blog serve [port]       live preview at http://localhost:8000
+  ./blog build              build the public site into docs/
+  ./blog publish ["msg"]    build, commit and push (if this is a git repo)
+"""
+import datetime as dt
+import http.server
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from functools import partial
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+from engine import build as site  # noqa: E402
+
+sys.stdout.reconfigure(line_buffering=True)
+
+TRANSLIT = dict(zip(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t",
+     "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"],
+))
+
+VSCODE = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+
+
+def slugify(text):
+    text = "".join(TRANSLIT.get(c, c) for c in text.lower())
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text[:60].rstrip("-")
+
+
+def open_in_editor(path):
+    editor = os.environ.get("EDITOR")
+    code = shutil.which("code") or (VSCODE if os.path.exists(VSCODE) else None)
+    if editor:
+        subprocess.call(editor.split() + [str(path)])
+    elif code:
+        subprocess.call([code, str(path)])
+
+
+def posts():
+    return sorted((p for p in site.POSTS.glob("*.md") if not p.name.startswith("_")), reverse=True)
+
+
+def cmd_new(args):
+    title = args[0] if args else input("Title (empty = today's date): ").strip()
+    now = dt.datetime.now()
+    stem = now.strftime("%Y-%m-%d") + ("-" + slugify(title) if slugify(title) else "")
+    path = site.POSTS / (stem + ".md")
+    k = 2
+    while path.exists():
+        path = site.POSTS / ("%s-%d.md" % (stem, k))
+        k += 1
+    template = (site.POSTS / "_template.md").read_text(encoding="utf-8")
+    text = (template.replace("{{title}}", title.replace('"', "'"))
+                    .replace("{{date}}", now.strftime("%Y-%m-%d %H:%M")))
+    site.POSTS.mkdir(exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print("new entry: %s" % path.relative_to(ROOT))
+    open_in_editor(path)
+
+
+def cmd_edit(args):
+    all_posts = posts()
+    if not all_posts:
+        print("no entries yet. start one with: ./blog new")
+        return
+    print(all_posts[0].relative_to(ROOT))
+    open_in_editor(all_posts[0])
+
+
+def cmd_list(args):
+    entries = site.load_posts(include_drafts=True)
+    if not entries:
+        print("no entries yet. start one with: ./blog new")
+    for p in entries:
+        flag = " [draft]" if p["draft"] else ""
+        print("%s  %s%s   posts/%s.md" % (p["date"].strftime("%Y-%m-%d"), p["title"], flag, p["slug"]))
+
+
+def cmd_build(args):
+    s = site.build(dev=False)
+    print("built %d entries, %d pages -> docs/" % (len(s.posts), len(s.pages)))
+
+
+def snapshot():
+    files = [site.ROOT / "site.json"]
+    for d in (site.POSTS, site.PAGES, site.FILES, site.THEME, site.ROOT / "engine"):
+        if d.exists():
+            files.extend(p for p in d.rglob("*") if p.is_file())
+    return {str(p): p.stat().st_mtime for p in files if p.exists()}
+
+
+def cmd_serve(args):
+    port = int(args[0]) if args else 8000
+    state = {"version": 0}
+
+    def rebuild():
+        try:
+            site.build(dev=True)
+            print("[%s] rebuilt" % time.strftime("%H:%M:%S"))
+        except Exception as e:  # keep serving; show the problem
+            print("[%s] build failed: %s: %s" % (time.strftime("%H:%M:%S"), type(e).__name__, e))
+        state["version"] += 1
+
+    def watch():
+        before = snapshot()
+        while True:
+            time.sleep(0.5)
+            now = snapshot()
+            if now != before:
+                if any(p.endswith(".py") and now.get(p) != before.get(p) for p in now):
+                    print("engine changed: restart ./blog serve to pick it up")
+                before = now
+                rebuild()
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/__reload":
+                body = str(state["version"]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            super().do_GET()
+
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    rebuild()
+    threading.Thread(target=watch, daemon=True).start()
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(site.PREVIEW)))
+    print("preview: http://localhost:%d   (drafts and empty slots visible here only; Ctrl+C to stop)" % port)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print()
+
+
+def cmd_publish(args):
+    cmd_build([])
+    if not (ROOT / ".git").exists():
+        print("not a git repository yet: run `git init` and add a remote to publish from here")
+        return
+    message = args[0] if args else "notebook: %s" % dt.date.today().isoformat()
+    subprocess.call(["git", "add", "-A"], cwd=ROOT)
+    if subprocess.call(["git", "commit", "-m", message], cwd=ROOT) != 0:
+        return
+    remotes = subprocess.run(["git", "remote"], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    if remotes:
+        subprocess.call(["git", "push"], cwd=ROOT)
+    else:
+        print("committed. no git remote set, so nothing was pushed")
+
+
+COMMANDS = {"new": cmd_new, "edit": cmd_edit, "list": cmd_list, "serve": cmd_serve,
+            "build": cmd_build, "publish": cmd_publish}
+
+if __name__ == "__main__":
+    name = sys.argv[1] if len(sys.argv) > 1 else "help"
+    if name not in COMMANDS:
+        print(__doc__.strip())
+        sys.exit(0 if name in ("help", "-h", "--help") else 1)
+    COMMANDS[name](sys.argv[2:])

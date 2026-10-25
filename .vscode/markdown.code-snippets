@@ -1,0 +1,17 @@
+{
+  "Notebook image with caption": {
+    "scope": "markdown",
+    "prefix": "img",
+    "body": ["![${1:alt}](/files/${2:image.jpg} \"${3:caption}\")"]
+  },
+  "Notebook todo": {
+    "scope": "markdown",
+    "prefix": "todo",
+    "body": ["- [ ] ${1}"]
+  },
+  "Notebook math block": {
+    "scope": "markdown",
+    "prefix": "math",
+    "body": ["$$", "${1}", "$$"]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "title": "Oleg Presnyakov",
+  "author": "Oleg Presnyakov",
+  "tagline": "",
+  "description": "Personal website and notebook of Oleg Presnyakov.",
+  "url": "https://olegolego.github.io",
+  "domain": "",
+  "language": "en",
+  "notebook_title": "Notebook",
+  "home_entries": 10,
+  "links": [
+    { "label": "GitHub", "url": "" },
+    { "label": "Email", "url": "mailto:opresnya@umich.edu" }
+  ]
+}

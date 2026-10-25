@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Notebook: new entry",
+      "type": "shell",
+      "command": "./blog new \"${input:title}\"",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Notebook: edit latest entry",
+      "type": "shell",
+      "command": "./blog edit",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Notebook: live preview",
+      "type": "shell",
+      "command": "./blog serve",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Notebook: build site",
+      "type": "shell",
+      "command": "./blog build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Notebook: publish",
+      "type": "shell",
+      "command": "./blog publish",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    { "id": "title", "type": "promptString", "description": "Entry title (leave empty to use today's date)" }
+  ]
+}

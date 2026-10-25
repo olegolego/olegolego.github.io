@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Oleg Presnyakov</title>
+  <link href="https://olegolego.github.io/"/>
+  <link rel="self" href="https://olegolego.github.io/feed.xml"/>
+  <id>https://olegolego.github.io/</id>
+  <updated>2026-10-25T11:52:39Z</updated>
+  <author><name>Oleg Presnyakov</name></author>
+
+</feed>
